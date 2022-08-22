@@ -1,0 +1,13 @@
+{
+  "name": "p2pnetwork",
+  "version": "1.0.0",
+  "main": "index.js",
+  "license": "MIT",
+  "type": "module",
+  "dependencies": {
+    "crypto": "^1.0.1",
+    "dat-swarm-defaults": "^1.0.3",
+    "discovery-swarm": "^6.1.0",
+    "get-port": "^6.1.2"
+  }
+}
