@@ -19,9 +19,9 @@ export class BlockHeader {
 }
 
 export class Block{
-    constructor(blockHeader, index, txns) {
+    constructor(blockHeader, idx, txns) {
         this.blockHeader = blockHeader;
-        this.index = index;
+        this.idx = idx;
         this.txns = txns;
     }
 }

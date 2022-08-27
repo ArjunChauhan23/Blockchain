@@ -4,8 +4,13 @@
   "main": "index.js",
   "license": "MIT",
   "type": "module",
+  "scripts": {
+    "start": "nodemon P2P network/p2p.js"
+  },
   "dependencies": {
+    "cron": "^2.1.0",
     "crypto": "^1.0.1",
+    "crypto-js": "^4.1.1",
     "dat-swarm-defaults": "^1.0.3",
     "discovery-swarm": "^5.1.0",
     "get-port": "^6.1.2",
