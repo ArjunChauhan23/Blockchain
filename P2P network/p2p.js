@@ -14,7 +14,7 @@ import getPort from "get-port";
 import {CronJob} from 'cron';
 
 //Chain
-import {getLatestBlock, blockchain, getBlock, addBlk, generateNextBlock} from '../Blocks and Chain/chain.js'
+import {getLatestBlock, blockchain, getBlock, addBlk, generateNextBlock, createDb} from '../Blocks and Chain/chain.js'
 
 //message and request receive by latest block
 let MessageType = {
@@ -48,6 +48,8 @@ here: https://github.com/mafintosh/discovery-swarm. What it does
 and connect peers on a UCP/TCP network
 */
 
+createDb(myPeerId.toString('hex'));
+
 const config = defaults({
     id: myPeerId,
 });
@@ -61,10 +63,12 @@ const swarm = Swarm(config);
     console.log('LISTENING PORT: ' + port);
 
     swarm.join(channel);
+
     swarm.on('CONNECTION', (conn, info) => {
         const seq = connSeq;
         const peerId = info.id.toString('hex');
-        console.log(`CONNECTED #${seq} to peer: ${peerId}`);
+        console.log(`CONNECTED #${seq} TO PEER: ${peerId}`);
+
         if (info.initiator) {
             try {
                 conn.setKeepAlive(true, 600);

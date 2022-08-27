@@ -1,6 +1,18 @@
 import moment from "moment";
 import {Block, BlockHeader} from "./block.js";
 
+//DB
+import {Level} from 'level';
+import * as fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+
+const __dirname = path.dirname(__filename);
+
+
+
 //Hash Function
 import sha256 from 'crypto-js/sha256.js';
 
@@ -42,4 +54,32 @@ const generateNextBlock = (txns) => {
     return newBlock;
 };
 
-export {addBlk, getGenesisBlock,getLatestBlock, getBlock , generateNextBlock}
+//DataBase
+let db;
+
+
+
+const createDb = (peerId) => {
+    const dir = '/home/arjunchauhan/Code/The-blockchain'+ '/db/' + peerId
+    if(!fs.existsSync(dir)){
+        fs.mkdirSync(dir);
+        db = new Level(dir);
+        storeBlock(getGenesisBlock());
+    }
+}
+function storeBlock(newBlock) {
+    db.put(newBlock.idx, JSON.stringify(newBlock) , (err) => {
+        if(err){
+            console.log(err)
+        }else
+            console.log('--- Inserting block index: ' + newBlock.idx);
+    })
+}
+
+let getDbBlock = (index, res) => {
+    db.get(index, function (err, value) {
+        if (err) return res.send(JSON.stringify(err));
+        return(res.send(value));
+    });
+}
+export {addBlk, getGenesisBlock,getLatestBlock, getBlock , generateNextBlock, createDb, getDbBlock}
