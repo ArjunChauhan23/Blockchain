@@ -1,22 +1,16 @@
-import crypto from 'crypto';
+    import crypto from "crypto";
+    import Swarm from  'discovery-swarm'
+    import defaults from 'dat-swarm-defaults'
+    import getPort from 'get-port'
+    import  {CronJob} from 'cron';
+    import {addBlk, blockchain, createDb, generateNextBlock, getBlock, getLatestBlock} from "../Blocks and Chain/chain.js";
 
-//Used to create a network swarm that uses
-//discovery-channel to find and connect peers
-import Swarm from 'discovery-swarm';
+const peers = {};
+let connSeq = 0,
+    channel = 'myBlockchain',
+    registeredMiners = [],
+    lastBlockMinedBy = null;
 
-//deploys servers that are used to discover other peers
-import defaults from 'dat-swarm-defaults';
-
-//get-port: Gets available TCP ports
-import getPort from "get-port";
-
-//
-import {CronJob} from 'cron';
-
-//Chain
-import {getLatestBlock, blockchain, getBlock, addBlk, generateNextBlock, createDb} from '../Blocks and Chain/chain.js'
-
-//message and request receive by latest block
 let MessageType = {
     REQUEST_BLOCK: 'requestBlock',
     RECEIVE_NEXT_BLOCK: 'receiveNextBlock',
@@ -25,28 +19,8 @@ let MessageType = {
     REGISTER_MINER: 'registerMiner'
 };
 
-//peers
-const peers = {};
-
-//Holding connection seq
-let connSeq = 0;
-
-
-let channel = 'myBlockchain';
-
-let registeredMiners = [],
-      lastBlockMinedBy = null;
-
-//Generate peer id
 const myPeerId = crypto.randomBytes(32);
-console.log('myPeer: ' + myPeerId.toString('hex'));
-
-/*
-The swarm library can be found
-here: https://github.com/mafintosh/discovery-swarm. What it does
-    is create a network swarm that uses the discovery-channel library to find
-and connect peers on a UCP/TCP network
-*/
+console.log('myPeerId: ' + myPeerId.toString('hex'));
 
 createDb(myPeerId.toString('hex'));
 
@@ -57,67 +31,62 @@ const config = defaults({
 const swarm = Swarm(config);
 
 (async () => {
-    //Listen at random port
     const port = await getPort();
+
     swarm.listen(port);
-    console.log('LISTENING PORT: ' + port);
+    console.log('Listening port: ' + port);
 
     swarm.join(channel);
-
-    swarm.on('CONNECTION', (conn, info) => {
+    swarm.on('connection', (conn, info) => {
         const seq = connSeq;
         const peerId = info.id.toString('hex');
-        console.log(`CONNECTED #${seq} TO PEER: ${peerId}`);
+        console.log(`Connected #${seq} to peer: ${peerId}`);
 
         if (info.initiator) {
             try {
                 conn.setKeepAlive(true, 600);
-
             } catch (exception) {
                 console.log('exception', exception);
             }
         }
+
         conn.on('data', data => {
-            let message = JSON.parse(JSON.stringify(data));
-            console.log('----------- RECEIVED MSG START -------------');
+            let message = JSON.parse(data);
+            console.log('----------- Received Message start -------------');
             console.log(
                 'from: ' + peerId.toString('hex'),
                 'to: ' + peerId.toString(message.to),
                 'my: ' + myPeerId.toString('hex'),
                 'type: ' + JSON.stringify(message.type)
             );
-            console.log('-----------  RECEIVED MSG END -------------');
-            //Handle Req
+            console.log('----------- Received Message end -------------');
 
             switch (message.type) {
                 case MessageType.REQUEST_BLOCK:
-                    console.log('--------------------REQUEST BLOCK-------------------');
                     let msg = JSON.stringify(message.data)
-                    console.log((JSON.parse(msg)))
-                    const reqIndex = (JSON.parse(msg)).idx;
+                    console.log('-----------REQUEST_BLOCK------------- ' + msg );
 
-                    const reqBlock = getBlock(reqIndex)
-                    if (reqBlock)
-                        writeMessageToPeerToId(peerId.toString('hex'), MessageType.RECEIVE_NEXT_BLOCK, reqBlock)
+                    let requestedIndex = (JSON.parse(msg)).index;
+                    let requestedBlock = getBlock(requestedIndex);
+                    if (requestedBlock)
+                        writeMessageToPeerToId(peerId.toString('hex'), MessageType.RECEIVE_NEXT_BLOCK, requestedBlock);
                     else
-                        console.log('NO BLOCK FOUND ' + reqIndex)
+                        console.log('No block found @ index: ' + requestedIndex);
+                    console.log('-----------REQUEST_BLOCK-------------');
                     break;
-
                 case MessageType.RECEIVE_NEXT_BLOCK:
                     console.log('-----------RECEIVE_NEXT_BLOCK-------------');
-                    addBlk(JSON.parse(JSON.stringify(message)));
-                    console.log(JSON.stringify(blockchain));
-                    let nextBlockIndex = getLatestBlock.idx + 1;
+                    addBlk(JSON.parse(JSON.stringify(message.data)));
+                    console.log('Blockchain: ' + JSON.stringify(blockchain));
+                    let nextBlockIndex = getLatestBlock().idx+1;
                     console.log('-- request next block @ index: ' + nextBlockIndex);
-                    writeMessageToPeers(MessageType.REQUEST_BLOCK, {idx: nextBlockIndex});
+                    writeMessageToPeers(MessageType.REQUEST_BLOCK, {index: nextBlockIndex});
                     console.log('-----------RECEIVE_NEXT_BLOCK-------------');
                     break;
-
                 case MessageType.RECEIVE_NEW_BLOCK:
                     if ( message.to === myPeerId.toString('hex') && message.from !== myPeerId.toString('hex')) {
                         console.log('-----------RECEIVE_NEW_BLOCK------------- ' + message.to);
-                        const msg = JSON.stringify(message.data)
-                        addBlk(JSON.parse(msg));
+                        addBlk(JSON.parse(JSON.stringify(message.data)));
                         console.log(JSON.stringify(blockchain));
                         console.log('-----------RECEIVE_NEW_BLOCK------------- ' + message.to);
                     }
@@ -125,27 +94,28 @@ const swarm = Swarm(config);
                 case MessageType.REQUEST_ALL_REGISTER_MINERS:
                     console.log('-----------REQUEST_ALL_REGISTER_MINERS------------- ' + message.to);
                     writeMessageToPeers(MessageType.REGISTER_MINER, registeredMiners);
-                    msg = JSON.stringify(message.data)
-                    registeredMiners = JSON.parse(msg);
+                    registeredMiners = JSON.parse(JSON.stringify(message.data));
                     console.log('-----------REQUEST_ALL_REGISTER_MINERS------------- ' + message.to);
                     break;
                 case MessageType.REGISTER_MINER:
                     console.log('-----------REGISTER_MINER------------- ' + message.to);
-                    let miners = JSON.stringify(message);
+                    let miners = JSON.stringify(message.data);
                     registeredMiners = JSON.parse(miners);
                     console.log(registeredMiners);
                     console.log('-----------REGISTER_MINER------------- ' + message.to);
                     break;
-
             }
         });
 
-
         conn.on('close', () => {
-            console.log(`Connection ${seq} closed, peerId:
-            ${peerId}`);
+            console.log(`Connection ${seq} closed, peerId: ${peerId}`);
             if (peers[peerId].seq === seq) {
-                delete peers[peerId]
+                delete peers[peerId];
+                console.log('--- registeredMiners before: ' + JSON.stringify(registeredMiners));
+                let index = registeredMiners.indexOf(peerId);
+                if (index > -1)
+                    registeredMiners.splice(index, 1);
+                console.log('--- registeredMiners end: ' + JSON.stringify(registeredMiners));
             }
         });
 
@@ -158,16 +128,7 @@ const swarm = Swarm(config);
     })
 })();
 
-// Here, you will be using a setTimeout Node.js native function to send
-// a message after ten seconds to any available peers. The first message
-// you will be sending is just an “hello” message. You create methods called
-// writeMessageToPeers and writeMessageToPeerToId to handle your
-// object, so it’s formatted with the data you want to transmit and who you want
-// to send it to.
-
-
-let writeMessageToPeers;
-writeMessageToPeers = (type, data) => {
+const writeMessageToPeers = (type, data) => {
     for (let id in peers) {
         console.log('-------- writeMessageToPeers start -------- ');
         console.log('type: ' + type + ', to: ' + id);
@@ -175,46 +136,46 @@ writeMessageToPeers = (type, data) => {
         sendMessage(id, type, data);
     }
 };
-let writeMessageToPeerToId;
-writeMessageToPeerToId = (toId, type, data) => {
+
+
+ const   writeMessageToPeerToId = (toId, type, data) => {
     for (let id in peers) {
         if (id === toId) {
-            console.log('-------- writeMessageToPeerToId start-------- ');
+            console.log('-------- writeMessageToPeerToId start -------- ');
             console.log('type: ' + type + ', to: ' + toId);
-
             console.log('-------- writeMessageToPeerToId end ----------- ');
             sendMessage(id, type, data);
         }
     }
 };
-let sendMessage;
-sendMessage = (id, type) => {
+
+const sendMessage = (id, type, data) => {
     peers[id].conn.write(JSON.stringify(
         {
             to: id,
             from: myPeerId,
             type: type,
+            data: data
         }
     ));
 };
 
-// Every 5000ms  new block add
 setTimeout(function(){
     writeMessageToPeers(MessageType.REQUEST_ALL_REGISTER_MINERS, null);
-}, 5000);
+}, 2000);
 
 setTimeout(function(){
     writeMessageToPeers(MessageType.REQUEST_BLOCK, {index: getLatestBlock().idx+1});
-}, 5000);
+}, 2000);
 
 setTimeout(function(){
-    const myPId = myPeerId.toString('hex')
-    registeredMiners.push(myPId);
+    let regMiner = myPeerId.toString('hex')
+    registeredMiners.push(regMiner);
     console.log('----------Register my miner --------------');
     console.log(registeredMiners);
     writeMessageToPeers(MessageType.REGISTER_MINER, registeredMiners);
     console.log('---------- Register my miner --------------');
-}, 7000);
+}, 3000);
 
 const job = new CronJob('30 * * * * *', function() {
     let index = 0; // first block

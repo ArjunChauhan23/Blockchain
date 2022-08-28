@@ -45,8 +45,8 @@ const generateNextBlock = (txns) => {
     let nextTime;
     let nextMerkleRoot;
     nextIndex = prevBlock.idx + 1
-        nextTime = moment().unix()
-        nextMerkleRoot = sha256(1, prevMerkleRoot, nextTime).toString();
+    nextTime = moment().unix()
+    nextMerkleRoot = sha256(1, prevMerkleRoot, nextTime).toString();
 
     const blockHeader = new BlockHeader(1, prevMerkleRoot, nextMerkleRoot, nextTime);
     const newBlock = new Block(blockHeader, nextIndex, txns);
